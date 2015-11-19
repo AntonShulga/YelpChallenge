@@ -71,11 +71,13 @@ Below is description of the variables:
 10. votes.[type]
 
      type = funny, useful, cool
+
      Total number of votes (of each type) given by Yelp members since start (integer, non-negative)
 
 11. compliments.[type]
 
      type = profile, cute, funny, plain, writer, note, photos, hot, cool, more, list
+
      Total number of compliments (of each type) given by Yelp members since start (integer, non-negative)
 
 12. FriendsNum1, FriendsNum2
@@ -133,57 +135,69 @@ Below is description of the variables:
 25. star[X]
 
      X = 1..5
+
      Total number of reviews with rating X written by user since start (limited to tips data set provided by Yelp) (integer, non-negative)
 
 26. reviews_[xxx]_length
 
      xxx = min, average, median, max
+
      Metric xxx of length of the all reviews written by user since start (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 27. tips_[xxx]_length
 
      xxx = min, average, median, max
+
      Metric xxx of length of the all tips written by user since start (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 28. tips_[xxx]_likes
 
      xxx = min, average, median, max
+
      Metric xxx of number of likes per tip (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 29. reviews_[xxx]_votes.[type]
 
      xxx = min, average, median, max
+
      type = funny, useful, cool
+
      Metric xxx of number of votes of certain type per review (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 30. reviews_frequency_av[X]
 
-     X = 3, 6, 12, 24, 26
+     X = 3, 6, 12, 24, 36
+
      Average number (per month) of reviews written by user in last X months (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 31. reviews_frequency_consist[X]
 
-     X = 3, 6, 12, 24, 26
+     X = 3, 6, 12, 24, 36
+
      Number of months in last X months in which user has posted at least one review (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 32. tips_frequency_av[X]
 
-     X = 3, 6, 12, 24, 26
+     X = 3, 6, 12, 24, 36
+
      Average number (per month) of tips written by user in last X months (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 33. tips_frequency_consist[X]
 
-     X = 3, 6, 12, 24, 26
+     X = 3, 6, 12, 24, 36
+
      Number of months in last X months in which user has posted at least one tip (limited to tips data set provided by Yelp) (numeric, non-negative)
 
 34. rev_t_[stem]
 
      stem = also, back, can, food, friend, get, good, great, just, like, love, nice, one, other, place, realli, servic, time, tri, veri
+
      total count of [stem] in the text of all reviews written by user since start (limited to tips data set provided by Yelp) (integer, non-negative)
 
 35. tip_t_[stem]
 
      stem = best, can, day, dont, food, free, get, good, great, happi, hour, just, like, love, lunch, one, place, servic, time, tri
+
      total count of [stem] in the text of all tips written by user since start (limited to tips data set provided by Yelp) (integer, non-negative)
 
 36. user_class
