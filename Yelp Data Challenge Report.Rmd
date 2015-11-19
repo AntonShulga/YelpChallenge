@@ -1,0 +1,196 @@
+--------------------------------------------------------------------------------
+title: **"Yelp Data Challenge Assignment"**
+author: "AShulga"
+date: "November 9, 2015"
+--------------------------------------------------------------------------------
+
+### Introduction
+In this research I try to analyze what is required from user to get elite status in the Yelp universe. I think this question is relevant for both users (who want to enjoy benefits available for Yelp elite members), business (who may want to know elite members better and try to target them through elite promotion campaigns) and Yelp itself (if they want to make sure that members get their elite status in time and for good reasons). The research is built on the Yelp Dataset and aims to build a prediction model based on user activity patterns. Activity pattern is defined based on the variety of information regarding user himself, businesses he commented, contents of the reviews and tips, his social connections, frequencies of online activities, travel intensity, popularity among other users etc. I found out that in general users with elite status are not closer in their business ratings to final business ratings but they provide more positive feedback and though are interesting audience for the business to target. My analysis demonstrates that number of reviews and complements of different types seem to be the most critical for the users to get elite status, as well as number of fans, friends and review votes. It was interesting to see that length of the reviews are also important factor while consistency in activity patterns and diversity of subjects (either business types or geography) are much less important. Boosted trees model provides the best overall prediction Accuracy and Sensitivity. I believe Specificity level at almost 99% may suggest some users are "mature" enough to get elite status but have not applied yet or there are some other factors defining the status that have not been subject of my analysis. Some further thought could be made on possible improvements of the analysis: we may need to dig further into difference in stems used by different user group (not just common most used stems) or we may need to define elite group more precisely taking time factor into account (not all elite users but the ones that has just received their status, to compare them with those who still don't have it). I could also combat class imbalance to look for improved classification methods.                
+
+
+``` {r}
+## Sourcing main code from local R file. 
+   suppressMessages(source("Yelp Data Analysis.R"))
+   set.seed(23456) ## for replicability 
+```
+
+Above sourced R file contains all the relevant preprocessing and analysis code and is available on [my project GitHub page](https://github.com/AntonShulga/YelpChallenge).
+
+***
+
+### Data preparation and analysis
+The analysis is based on Yelp Data Challenge data set available  [here](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/yelp_dataset_challenge_academic_dataset.zip). The data set contains information on 366k users, 1.6 mln reviews, 500k tips, 61k businesses and related check-ins summaries. Initial data summary can be found [Yelp Data Challenge website](http://www.yelp.com/dataset_challenge). Initial data sets were loaded into R with *ReadFromInitialSource* function. To come up with more advanced user behavior metrics I have processed the initial data set. The following types of features have been derived (for each user):
+
+* number of friends (1st and 2nd connection levels)
+* elite start year and elite status "age" (to be used for class definitions only)
+* yelping start year and "age"
+* total tip count and relevant tip likes count per user
+* count of unique business types for which user generated reviews and tips
+* count of unique cities/states/countries that host these businesses
+* count of reviews by rating (though limited by the amount of data made available by Yelp)
+* intensity and uniformity of review and tip creation in recent period of time
+* lenth of reviews and tips
+* count of top-20 words (stems) used in overall corpuses of reviews and tips
+* data on review votes by vote type
+
+The above data preparation is done with *ProcessUser* function that takes several days to get through with my Intel i7 2.2 GHz laptop with 8 GB RAM. Therefore I have saved processed dataset in RDS format and use it below for further analysis. The dataset contains 130 features and is available on [this link] (https://yadi.sk/d/qdsL718tkaey2). You can have a more detailed look on the generated features in the [Code Book](https://github.com/AntonShulga/YelpChallenge/CodeBook.md).    
+
+```{r}
+   user_data <- YRead("user_full")  # load saved results of ProcessUsers() 
+   user_data$user_class <- relevel(user_data$user_class, ref = "elite")
+```
+
+Now lets see the distribution of the classes among users: 
+```{r}
+   round(summary(user_data$user_class)/nrow(user_data)*100, 2) 
+```
+
+There is quite significant class imbalance in the data. We will ignore this in our analysis at this stage. 
+
+***
+
+### Importance of the analysis 
+It is quite obvious that for the user it is interesting to know what is required from them to get elite Yelp status. But what about the business? Does it interesting to know who has elite status or not? Lets see if ratings of elite users are more "close" to the final Yelp business ratings:
+
+```{r, fig.width=8, cache=TRUE}
+   
+   all_ratings <- WhyWeNeedThisAnalysis() # derives average ratigs for each business by user class and calculates differences to final rating
+   t.test(all_ratings$dif_elite, all_ratings$dif_non_elite)
+   
+```
+From the analysis above we see that there are clear differences in average ratings assigned to the same businesses. T-test demonstrates that non elite members ratings are closer to total (suggesting that Yelp final rating formula to use unadjusted class weights). But in the same time elite members provide more positive feedback in general that in combination with their friends/fans counts suggests them to be still a good target for businesses.   
+
+***
+
+### Exploratary Data Analysis
+As discussed we have almost 367k data points and 129 initial features (last one is user class). The data set is unbalanced (elite members are about 7% of total). Now lets see how different are the two subject user classes: 
+
+```{r, cache=TRUE}
+   print(ShowClassDifferences())  
+```
+
+Above we summarize averages for selected features for each class. As we can see some of them (like number of reviews, friends, fans) differs considerably and proves our initial hypothesis (that elite are more active members of Yelp society). The following code helps to get more insight into relationship of features and model outcome (user class) for a fairly large random sample of data points. The resulted file (*features.png*) will be saved to your working directory and also available [here](https://github.com/AntonShulga/YelpChallenge/features.png):
+
+```{r, results='hide'}
+   # removing non informative factors (like user_id, elite sarting year etc)     
+   non_valid_factors <- c(1, 2, 4, 5, 8, 9, 28, 29, 32)
+   user_data <- user_data[, -non_valid_factors]
+   suppressMessages(PlotFeatures(user_data))
+```
+
+Now we can see that quite a lot of factors derived are different for the subject classes. That should provide good background for classification algorithms. 
+
+***
+
+### Modeling strategy
+I have come up with a fairly large list of classification models that I want to try: from basic methods like KNN, logistic regression and simple decision tree to much more complex like support vector machines, partial least square, neural networks, boosted trees models and random forests. I want to compare resulted overall classification accuracy across these models for both cross validated train set and test set. Moreover, there are good reasons to look on Sensitivity more closely, as Type II errors may to some extent be treated like the users that meets elite standards but did not apply for that for any reason (Yelp may be interested to look into details).
+
+To simplify my analysis a bit I decided to shrink the number of features by deleting the ones that has low entropy and those that is highly correlated (90%). That should help some of the methods to show better results (like logistic regression and PLS). Moreover I would like to manually replace all NAs in the data set to zero (OK with the nature of the features) to help some of the methods to cope with missing data.
+
+```{r, results='hide'}
+   # setting NAs to zero
+   suppressWarnings(for (ind in 1:ncol(user_data)) 
+      user_data[is.na(user_data[,ind]), ind] <- 0)
+   
+   # near zero varience features elimination (taking into account class imbalance)
+   set.seed(23456)
+   u_data <- user_data[sample(1:nrow(user_data), 25000),]
+   n_elite <- nearZeroVar(u_data[u_data$user_class == "elite",1:(ncol(user_data)-1)])
+   n_non_elite <- nearZeroVar(u_data[u_data$user_class == "non elite",1:(ncol(user_data)-1)])
+   nzv_eliminate <- intersect(n_elite, n_non_elite)
+   user_data <- user_data[, -nzv_eliminate]
+
+   # look for correlations between factors 
+   high_corr <- findCorrelation(cor(u_data[,1:(ncol(u_data)-1)]))
+   user_data <- user_data[,-high_corr]
+```
+
+Now we are ready to split the data set into 2 chunks. First one (70%) would be used for models training and the second one (30%) is to be used to test the algorithm. 
+
+```{r}
+
+   train_ind <- createDataPartition(user_data$user_class, p = 0.7, list = FALSE)
+   user_train <- user_data[train_ind, ]
+   user_test <- user_data[-train_ind, ]
+   
+```
+
+The size of the train set is still too large for the all models to run in a tuning mode. So for the sake of computation time I decided to further reduced the train set on a first phase of analysis (random sample of 10k data points) to compare all the models (by accuracy and sensitivity for random hold out data set of the same size out of this train set) and find best parameters through tuning. As result of this phase I would analyze the importance of features for every model developed and derive an average metric for feature importance (simple average across all subject models). Then on the second step the best model will be build on the entire train data set (~250k data points). This final model will be tested on the final step on the test data set.
+
+***
+
+### Model development
+I have specified a special function that runs all the models described above and returns a list with table of accuracy metrics by every model, results of resampling analysis and table with feature importance scores for each method.
+
+```{r, cache=TRUE}
+
+   suppressWarnings(forReport <- GetModelResults(user_train, train_size = 10000))
+   forReport$results # metrics are based on hold out set of 10k users
+   parallelplot(forReport$resamps)
+   
+```
+
+Now we can see that boosted trees model provides the best performance (based on both cross validated accuracy metrics and hold out data set). But before we move on to the final step of our modeling phase we will have a closer look at the feature importance. We have collected feature importance metrics for every model (except Logistic regression that does not allow this analysis) and can have a look at the list of top features (averaged across all models).
+
+```{r, cache=TRUE, fig.width = 8}
+
+   top <- apply(forReport$impData,2, mean, na.rm = TRUE)
+   forReport$impData <- rbind(forReport$impData, top)
+   topImp <- as.data.frame(
+      t(forReport$impData[9,])[order(top, decreasing = TRUE),])
+   names(topImp) <- "ImpScore"
+   topImp$Features <- row.names(topImp)
+   topImp <- within(topImp, Features <- reorder(Features, -ImpScore))
+   
+   ggplot(topImp, aes(x = Features, y = ImpScore)) + 
+      labs(x = "Feature", y = "Average importance score", 
+           title = "Top-20 features by importance across all models") +
+      geom_bar(stat = "identity", 
+               alpha = .50, 
+               color = "steelblue", 
+               fill = "steelblue") +
+      theme(text = element_text(size=12),
+            axis.text.x = element_text(angle=90, hjust=1, vjust = 0))
+
+```
+
+We can see that compliments received by user, as well as user yelping experience, number of reviews, fans and friends are found to be most influencing factors across all models. On the other hand activity time pattern (average number of reviews in recent months and number of months with/without activity), as well as commenting on lots of different types of businesses seem to be less important.   So the user that is willing to get elite rating may be not that active but should compose a lot of brilliant and long reviews, has active social network that may result in lots of compliments. That looks like a key for success. 
+
+It was a bit disappointing to see quite low importance of stems used in the text of reviews and tips. I may further need take some deeper insight into differences in stem used by users of different classes. At the same time some other stats may be used (relative frequencies of stems instead of total count, or TFIDF metrics) to measure class differences. 
+
+We will now stay with the best method (gradient boosting) and will build the model for the entire train data set. That should take quite a while... 
+```{r, cache=TRUE}
+
+   set.seed(23456)
+   gbmGrid <- expand.grid(interaction.depth = 6, # best parameters are  
+                          n.trees = 50,          # estimated on smaller trials
+                          shrinkage = .1, 
+                          n.minobsinnode = 10)
+   gbmModel <- train(user_class ~ .,
+                     data = user_train, #[sample(1:nrow(user_train), 50000),],
+                     method = "gbm",
+                     tuneGrid = gbmGrid,
+                     trControl = trainControl(method = "cv", number = 10),
+                     verbose = FALSE)
+   gbmModel$results[5:8]
+   
+```
+
+We can see that cross-validated estimate of overall accuracy is quite good (97.6%) in comparison to reference level (NIR = 93.1% due to class imbalance). Now lets check how good are the model based on the test set:     
+
+```{r, cache=TRUE}
+   gbmPredictions <- predict(gbmModel, user_test)
+   confusionMatrix(gbmPredictions, user_test$user_class)   
+```
+
+
+***
+
+### Conclusions and takeaways
+It looks like the cross validation provided a very good estimate for the test set! It is also important that Sensitivity is quite high while some Type II error (1.2%) may mean that some users are already prove to be ready for the elite status (Yelp should have a closer look at them!).
+
+I believe there is still some areas for development that can results in some further improvement of algorithm accuracy. I have already mentioned some further thoughts on text processing. It may be also interesting to try distinguish between elite users that just has received the status and those who has extensive status age. That will allow to understand the inferential qualities of elite status - does it attracts fans or number of fans allow to get the status. Some methods to combat class imbalance could be further introduced as well to see if it results in model improvement. 
+
+
+
+
