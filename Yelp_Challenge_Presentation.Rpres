@@ -1,0 +1,118 @@
+Yelp Data Challenge Assignment
+========================================================
+author: Anton Shulga
+date: November 20, 2015
+
+
+
+Intro
+========================================================
+
+<small>
+**"It's neat to be elite"**, Yelp says! In this research I try to analyze what is required from user to get elite status in the Yelp universe. I think this question is relevant for both: 
+- users (who want to enjoy benefits available for Yelp elite members), 
+- business (who may want to know elite members better and try to target them through elite promotion campaigns) and 
+- Yelp itself (if they want to make sure that members get their elite status in time and for good reasons). 
+
+Further I try to develop classification algorithm that can define user status based on his/her behavior pattern.
+
+The data for analysis was provided by Yelp and is available [here] (https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/yelp_dataset_challenge_academic_dataset.zip).
+All the code as well as the full version of my analysis is available on [my GitHub webpage] (https://github.com/AntonShulga/YelpChallenge).
+</small>
+
+Approach
+========================================================
+
+<small>
+My analysis consists of several steps:
+- Initial data sets were preprocessed to enrich "user" data set with new features. Code Book for the features is available [here] (https://github.com/AntonShulga/YelpChallenge/blob/master/CodeBook.md)
+- 8 classification models were chosen for further analysis: KNN, logistic regression, decision trees, support vector machines, partial least square, neural networks, boosted trees models and random forests.
+- User data set were additionally preprocessed (center and scale, PCA for linier models)
+- Each of the 8 model were built on the random 10k sample (10-fold cross validation), hold out set of the same size was used as test data set
+- For each of 8 model (excluding logistic regression) feature importance was calculated
+- For the best method (by cross-validated and test Accuracy) the model was built on the full "user" train data set (70% of total). The other 30% was used as a final test set. 
+</small>
+
+Feature importance
+========================================================
+
+```{r, echo=FALSE, cache=TRUE, warning=FALSE, message=FALSE, fig.width=6}
+   suppressMessages(source("Yelp Data Analysis.R"))
+   set.seed(23456) ## for replicability 
+   user_data <- YRead("user_full")  # load saved results of ProcessUsers() 
+   user_data$user_class <- relevel(user_data$user_class, ref = "elite")
+   non_valid_factors <- c(1, 2, 4, 5, 8, 9, 28, 29, 32)
+   user_data <- user_data[, -non_valid_factors]
+   
+   # setting NAs to zero
+   suppressWarnings(for (ind in 1:ncol(user_data)) 
+      user_data[is.na(user_data[,ind]), ind] <- 0)
+   
+   # near zero varience features elimination (taking into account class imbalance)
+   set.seed(23456)
+   u_data <- user_data[sample(1:nrow(user_data), 25000),]
+   n_elite <- nearZeroVar(u_data[u_data$user_class == "elite",1:(ncol(user_data)-1)])
+   n_non_elite <- nearZeroVar(u_data[u_data$user_class == "non elite",1:(ncol(user_data)-1)])
+   nzv_eliminate <- intersect(n_elite, n_non_elite)
+   user_data <- user_data[, -nzv_eliminate]
+
+   # look for correlations between factors 
+   high_corr <- findCorrelation(cor(u_data[,1:(ncol(u_data)-1)]))
+   user_data <- user_data[,-high_corr]
+   
+   train_ind <- createDataPartition(user_data$user_class, p = 0.7, list = FALSE)
+   user_train <- user_data[train_ind, ]
+   user_test <- user_data[-train_ind, ]   
+   
+   suppressWarnings(forReport <- GetModelResults(user_train, train_size = 10000))
+                    
+   top <- apply(forReport$impData,2, mean, na.rm = TRUE)
+   forReport$impData <- rbind(forReport$impData, top)
+   topImp <- as.data.frame(
+      t(forReport$impData[9,])[order(top, decreasing = TRUE),])
+   names(topImp) <- "ImpScore"
+   topImp$Features <- row.names(topImp)
+   topImp <- within(topImp, Features <- reorder(Features, -ImpScore))
+   
+   ggplot(topImp, aes(x = Features, y = ImpScore)) + 
+      labs(x = "Feature", y = "Average importance score", 
+           title = "Top-20 features by importance across all models") +
+      geom_bar(stat = "identity", 
+               alpha = .50, 
+               color = "steelblue", 
+               fill = "steelblue") +
+      theme(text = element_text(size=12),
+            axis.text.x = element_text(angle=90, hjust=1, vjust = 0))                       
+   
+```
+<small>
+My analysis demonstrates that number of reviews and complements of different types seem to be the most critical for the users to get elite status, as well as number of fans, friends and review votes. It was interesting to see that length of the reviews are also important factor while consistency in activity patterns and diversity of subjects (either business types or geography) are much less important. 
+</small>
+
+Conclusions
+========================================================
+
+```{r, echo=FALSE, cache=TRUE}
+   set.seed(23456)
+   gbmGrid <- expand.grid(interaction.depth = 6, # best parameters are  
+                          n.trees = 50,          # estimated on smaller trials
+                          shrinkage = .1, 
+                          n.minobsinnode = 10)
+   gbmModel <- train(user_class ~ .,
+                     data = user_train, #[sample(1:nrow(user_train), 50000),],
+                     method = "gbm",
+                     tuneGrid = gbmGrid,
+                     trControl = trainControl(method = "cv", number = 10),
+                     verbose = FALSE)
+   gbmPredictions <- predict(gbmModel, user_test)
+   matr <- confusionMatrix(gbmPredictions, user_test$user_class)
+   print(paste("Overall Accuracy is", 
+               as.character(round(matr$overall[[1]],2)),
+               "and Sensitivity is ",
+               as.character(round(matr$byClass[[1]],2))))
+```
+<small>
+Boosted trees model provides the best overall prediction Accuracy (98% on the test set) and Sensitivity (81%). I believe Specificity level at almost 99% may suggest some users are "mature" enough to get elite status but have not applied yet or there are some other factors defining the status that have not been subject of my analysis.
+
+Some further thought could be made on possible improvements of the analysis: we may need to dig further into difference in stems used by different user group (not just common most used stems) or we may need to define elite group more precisely taking time factor into account (not all elite users but the ones that has just received their status, to compare them with those who still don't have it). I could also combat class imbalance to look for improved classification methods.
+</small>
